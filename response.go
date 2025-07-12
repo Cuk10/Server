@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"server/internal/database"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func handlerDecode(w http.ResponseWriter, r *http.Request) {
@@ -33,6 +37,68 @@ func handlerDecode(w http.ResponseWriter, r *http.Request) {
 	} else {
 		payload := badWordReplacement(params.Body)
 		respondWithJSON(w, code, payload)
+	}
+}
+
+func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg.fileserverHits.Add(1)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (cfg *apiConfig) handlerMetrics(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(200)
+	w.Write([]byte(fmt.Sprintf(`<html>
+  <body>
+    <h1>Welcome, Chirpy Admin</h1>
+    <p>Chirpy has been visited %d times!</p>
+  </body>
+</html>`, cfg.fileserverHits.Load())))
+}
+
+func (cfg *apiConfig) handlerReset(w http.ResponseWriter, r *http.Request) {
+	if cfg.platform != "dev" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(403)
+		w.Write([]byte("Forbidden"))
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(200)
+	w.Write([]byte(""))
+	cfg.fileserverHits.Store(0)
+	err := cfg.dbQueries.ResetUsers(r.Context())
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (cfg *apiConfig) handlerUser(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email string `json:"email"`
+	}
+	msg := ""
+	code := 201
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		msg = "Something went wrong"
+		code = 500
+	}
+	user, err := cfg.dbQueries.CreateUser(r.Context(), params.Email)
+	if err != nil {
+		msg = "Something went wrong"
+		code = 500
+	}
+
+	if err != nil {
+		respondWithError(w, code, msg)
+	} else {
+		respondWithUser(w, code, user)
 	}
 }
 
@@ -76,4 +142,26 @@ func badWordReplacement(body string) string {
 		}
 	}
 	return strings.Join(bodyWords, " ")
+}
+
+func respondWithUser(w http.ResponseWriter, code int, user database.User) {
+	type returnVals struct {
+		ID        uuid.UUID `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Email     string    `json:"email"`
+	}
+
+	respBody := returnVals{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+	}
+
+	data, _ := json.Marshal(respBody)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(data)
 }
