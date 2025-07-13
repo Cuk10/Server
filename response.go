@@ -6,17 +6,17 @@ import (
 	"net/http"
 	"server/internal/database"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 )
 
-func handlerDecode(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Body string `json:"body"`
+		Body   string `json:"body"`
+		UserID string `json:"user_id"`
 	}
 	msg := ""
-	code := 200
+	code := 201
 
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
@@ -27,16 +27,36 @@ func handlerDecode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(params.Body) > 140 {
-		err = fmt.Errorf("chirp is too long")
 		msg = "Chirp is too long"
 		code = 400
+		respondWithError(w, code, msg)
 	}
 
+	args := database.CreateChirpParams{
+		Body:   params.Body,
+		UserID: uuid.MustParse(params.UserID),
+	}
+
+	chirp, err := cfg.dbQueries.CreateChirp(r.Context(), args)
+
 	if err != nil {
+		msg = "Something went wrong"
+		code = 500
 		respondWithError(w, code, msg)
 	} else {
-		payload := badWordReplacement(params.Body)
-		respondWithJSON(w, code, payload)
+		respBody := returnChirp{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
+		}
+
+		data, _ := json.Marshal(respBody)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		w.Write(data)
 	}
 }
 
@@ -98,7 +118,18 @@ func (cfg *apiConfig) handlerUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondWithError(w, code, msg)
 	} else {
-		respondWithUser(w, code, user)
+		respBody := returnUser{
+			ID:        user.ID,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+			Email:     user.Email,
+		}
+
+		data, _ := json.Marshal(respBody)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		w.Write(data)
 	}
 }
 
@@ -118,22 +149,6 @@ func respondWithError(w http.ResponseWriter, code int, msg string) {
 	w.Write(data)
 }
 
-func respondWithJSON(w http.ResponseWriter, code int, payload string) {
-	type returnVals struct {
-		ClBody string `json:"cleaned_body"`
-	}
-
-	respBody := returnVals{
-		ClBody: payload,
-	}
-
-	data, _ := json.Marshal(respBody)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(data)
-}
-
 func badWordReplacement(body string) string {
 	bodyWords := strings.Split(body, " ")
 	for i, word := range bodyWords {
@@ -144,19 +159,58 @@ func badWordReplacement(body string) string {
 	return strings.Join(bodyWords, " ")
 }
 
-func respondWithUser(w http.ResponseWriter, code int, user database.User) {
-	type returnVals struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Email     string    `json:"email"`
+func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
+	msg := ""
+	code := 200
+
+	chirps, err := cfg.dbQueries.GetAllChirps(r.Context())
+
+	if err != nil {
+		msg = "Something went wrong"
+		code = 500
+		respondWithError(w, code, msg)
+		return
+	}
+	respBody := []returnChirp{}
+	for _, chirp := range chirps {
+		respChirp := returnChirp{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
+		}
+		respBody = append(respBody, respChirp)
 	}
 
-	respBody := returnVals{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+	data, _ := json.Marshal(respBody)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(data)
+
+}
+
+func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
+	msg := ""
+	code := 200
+	chirpID := uuid.MustParse(r.PathValue("chirpID"))
+
+	chirp, err := cfg.dbQueries.GetChirp(r.Context(), chirpID)
+
+	if err != nil {
+		msg = "Something went wrong"
+		code = 404
+		respondWithError(w, code, msg)
+		return
+	}
+
+	respBody := returnChirp{
+		ID:        chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body:      chirp.Body,
+		UserID:    chirp.UserID,
 	}
 
 	data, _ := json.Marshal(respBody)
