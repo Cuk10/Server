@@ -16,12 +16,14 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	dbQueries      *database.Queries
 	platform       string
+	secret         string
 }
 
 func main() {
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
 	platform := os.Getenv("PLATFORM")
+	secret := os.Getenv("SECRET")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		fmt.Println(err)
@@ -31,6 +33,7 @@ func main() {
 		fileserverHits: atomic.Int32{},
 		dbQueries:      database.New(db),
 		platform:       platform,
+		secret:         secret,
 	}
 
 	mux := http.NewServeMux()
@@ -45,11 +48,17 @@ func main() {
 
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 
-	mux.HandleFunc("POST /api/chirps", apiCfg.handlerChirp)
+	mux.HandleFunc("POST /api/users", apiCfg.handlerMakeUser)
 
-	mux.HandleFunc("POST /api/users", apiCfg.handlerUser)
+	mux.HandleFunc("POST /api/login", apiCfg.handlerUserLogin)
+
+	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
+
+	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
 
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
+
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerPostChirp)
 
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirp)
 
