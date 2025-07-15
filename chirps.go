@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"server/internal/auth"
 	"server/internal/database"
+	"sort"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -78,8 +80,13 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 	msg := ""
 	code := 200
 
-	chirps, err := cfg.dbQueries.GetAllChirps(r.Context())
+	id := r.URL.Query().Get("author_id")
+	s := r.URL.Query().Get("sort")
 
+	chirps, err := cfg.dbQueries.GetAllChirps(r.Context())
+	if id != "" {
+		chirps, err = cfg.dbQueries.GetAllUserChirps(r.Context(), uuid.MustParse(id))
+	}
 	if err != nil {
 		msg = "Something went wrong"
 		code = 500
@@ -96,6 +103,10 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 			UserID:    chirp.UserID,
 		}
 		respBody = append(respBody, respChirp)
+	}
+
+	if s == "desc" {
+		sort.Slice(respBody, func(i, j int) bool { return time.Since(respBody[i].CreatedAt) < time.Since(respBody[j].CreatedAt) })
 	}
 
 	data, _ := json.Marshal(respBody)
