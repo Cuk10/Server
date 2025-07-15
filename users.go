@@ -7,6 +7,8 @@ import (
 	"server/internal/auth"
 	"server/internal/database"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func (cfg *apiConfig) handlerReset(w http.ResponseWriter, r *http.Request) {
@@ -66,10 +68,11 @@ func (cfg *apiConfig) handlerMakeUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respBody := returnUser{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+		ID:          user.ID,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 
 	data, _ := json.Marshal(respBody)
@@ -150,6 +153,7 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 		Email:        user.Email,
 		Token:        jwtToken,
 		RefreshToken: refresh_token,
+		IsChirpyRed:  user.IsChirpyRed,
 	}
 
 	data, _ := json.Marshal(respBody)
@@ -215,10 +219,11 @@ func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respBody := returnUser{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+		ID:          user.ID,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 
 	data, _ := json.Marshal(respBody)
@@ -227,4 +232,55 @@ func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(code)
 	w.Write(data)
 
+}
+
+func (cfg *apiConfig) handlerRedUser(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Event string `json:"event"`
+		Data  struct {
+			UserID string `json:"user_id"`
+		} `json:"data"`
+	}
+	msg := ""
+	code := 204
+
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil || apiKey != cfg.polkaKey {
+		code = 401
+		respondWithError(w, code, msg)
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err = decoder.Decode(&params)
+	if err != nil {
+		msg = "Something went wrong"
+		code = 500
+		respondWithError(w, code, msg)
+		return
+	}
+
+	if params.Event != "user.upgraded" {
+		respondWithError(w, code, msg)
+		return
+	}
+
+	id, err := uuid.Parse(params.Data.UserID)
+	if err != nil {
+		msg = "Something went wrong"
+		code = 500
+		respondWithError(w, code, msg)
+		return
+	}
+
+	err = cfg.dbQueries.RedChirpyUser(r.Context(), id)
+	if err != nil {
+		code = 404
+		respondWithError(w, code, msg)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
 }

@@ -64,7 +64,7 @@ func (q *Queries) GetRefreshToken(ctx context.Context, token string) (RefreshTok
 }
 
 const getUserFromRefreshToken = `-- name: GetUserFromRefreshToken :one
-SELECT id, u.created_at, u.updated_at, email, hashed_password, token, r.created_at, r.updated_at, expires_at, revoked_at, user_id FROM users u INNER JOIN refresh_tokens r ON u.id = r.user_id WHERE r.token = $1
+SELECT id, u.created_at, u.updated_at, email, hashed_password, is_chirpy_red, token, r.created_at, r.updated_at, expires_at, revoked_at, user_id FROM users u INNER JOIN refresh_tokens r ON u.id = r.user_id WHERE r.token = $1
 `
 
 type GetUserFromRefreshTokenRow struct {
@@ -73,6 +73,7 @@ type GetUserFromRefreshTokenRow struct {
 	UpdatedAt      time.Time
 	Email          string
 	HashedPassword string
+	IsChirpyRed    bool
 	Token          string
 	CreatedAt_2    time.Time
 	UpdatedAt_2    time.Time
@@ -90,6 +91,7 @@ func (q *Queries) GetUserFromRefreshToken(ctx context.Context, token string) (Ge
 		&i.UpdatedAt,
 		&i.Email,
 		&i.HashedPassword,
+		&i.IsChirpyRed,
 		&i.Token,
 		&i.CreatedAt_2,
 		&i.UpdatedAt_2,

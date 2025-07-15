@@ -72,3 +72,21 @@ func MakeRefreshToken() (string, error) {
 	str := hex.EncodeToString(b)
 	return str, nil
 }
+
+func GetAPIKey(headers http.Header) (string, error) {
+	header, ok := headers["Authorization"]
+	if !ok {
+		return "", fmt.Errorf("not found")
+	}
+
+	apiKey_str := ""
+	for _, h := range header {
+		bear := strings.Split(h, " ")
+		if bear[0] == "ApiKey" {
+			key := bear[1:]
+			apiKey_str = strings.Join(key, " ")
+		}
+	}
+
+	return apiKey_str, nil
+}
