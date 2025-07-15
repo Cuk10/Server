@@ -82,9 +82,8 @@ func (cfg *apiConfig) handlerMakeUser(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Password  string `json:"password"`
-		Email     string `json:"email"`
-		ExpiresIn int    `json:"expires_in_seconds"`
+		Password string `json:"password"`
+		Email    string `json:"email"`
 	}
 	msg := ""
 	code := 200
@@ -97,14 +96,6 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 		code = 500
 		respondWithError(w, code, msg)
 		return
-	}
-
-	expiresIn := 3600
-	if params.ExpiresIn != 0 {
-		expiresIn = params.ExpiresIn
-		if expiresIn > 3600 {
-			expiresIn = 3600
-		}
 	}
 
 	user, err := cfg.dbQueries.GetUserByEmail(r.Context(), params.Email)
@@ -159,6 +150,75 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 		Email:        user.Email,
 		Token:        jwtToken,
 		RefreshToken: refresh_token,
+	}
+
+	data, _ := json.Marshal(respBody)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(data)
+
+}
+
+func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Password string `json:"password"`
+		Email    string `json:"email"`
+	}
+	msg := ""
+	code := 200
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		msg = "Something went wrong"
+		code = 500
+		respondWithError(w, code, msg)
+		return
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		code = 401
+		respondWithError(w, code, msg)
+		return
+	}
+
+	user_id, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		code = 401
+		respondWithError(w, code, msg)
+		return
+	}
+
+	hash, err := auth.HashPassword(params.Password)
+	if err != nil {
+		msg = "Something went wrong with password"
+		code = 500
+		respondWithError(w, code, msg)
+		return
+	}
+
+	args := database.UpdateUserParams{
+		Email:          params.Email,
+		HashedPassword: hash,
+		ID:             user_id,
+	}
+
+	user, err := cfg.dbQueries.UpdateUser(r.Context(), args)
+	if err != nil {
+		msg = "Something went wrong"
+		code = 500
+		respondWithError(w, code, msg)
+		return
+	}
+
+	respBody := returnUser{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
 	}
 
 	data, _ := json.Marshal(respBody)

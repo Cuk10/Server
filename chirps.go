@@ -134,3 +134,48 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(code)
 	w.Write(data)
 }
+
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
+	msg := ""
+	code := 204
+	chirpID := uuid.MustParse(r.PathValue("chirpID"))
+
+	chirp, err := cfg.dbQueries.GetChirp(r.Context(), chirpID)
+	if err != nil {
+		msg = "Something went wrong"
+		code = 404
+		respondWithError(w, code, msg)
+		return
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		code = 401
+		respondWithError(w, code, msg)
+		return
+	}
+
+	user_id, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		code = 401
+		respondWithError(w, code, msg)
+		return
+	}
+
+	if user_id != chirp.UserID {
+		code = 403
+		respondWithError(w, code, msg)
+		return
+	}
+
+	err = cfg.dbQueries.DeleteChirp(r.Context(), chirp.ID)
+	if err != nil {
+		msg = "Something went wrong"
+		code = 500
+		respondWithError(w, code, msg)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+}

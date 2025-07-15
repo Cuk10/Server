@@ -50,6 +50,8 @@ func main() {
 
 	mux.HandleFunc("POST /api/users", apiCfg.handlerMakeUser)
 
+	mux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateUser)
+
 	mux.HandleFunc("POST /api/login", apiCfg.handlerUserLogin)
 
 	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
@@ -61,6 +63,8 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerPostChirp)
 
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirp)
+
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerDeleteChirp)
 
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 
